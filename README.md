@@ -12,6 +12,7 @@ Launcher --> "Accedi con GitHub" (una volta) --> legge l'ultima Release --> se l
 ```
 
 - I repository sono **privati**: il launcher scarica con l'accesso GitHub di ciascun utente (nessuna password passa dal launcher, e nessun token va copiato a mano).
+- L'accesso avviene tramite una **GitHub App** con il solo permesso di **lettura dei contenuti**: il token non puo mai modificare i repository, nemmeno per un utente che ne e collaboratore con diritto di scrittura.
 - Ogni versione va in una cartella propria (`%LOCALAPPDATA%\FornaDagarLauncher\apps\<gioco>\<versione>\`): si puo aggiornare anche a gioco aperto e la versione precedente resta per il ripristino ("Torna alla ...").
 - Mazzi e impostazioni non stanno in quelle cartelle (i giochi li salvano in Documenti): un aggiornamento non li tocca.
 - Lo zip scaricato viene verificato (dimensione e SHA-256) prima dell'installazione.
@@ -20,26 +21,28 @@ Launcher --> "Accedi con GitHub" (una volta) --> legge l'ultima Release --> se l
 
 ## Impostazione una tantum (per chi gestisce il progetto)
 
-### 1. Registrare l'OAuth App su GitHub
-GitHub, in alto a destra la tua foto, **Settings > Developer settings > OAuth Apps > New OAuth App**:
+### 1. La GitHub App
+GitHub, foto profilo, **Settings > Developer settings > GitHub Apps > New GitHub App**:
 
 | Campo | Valore |
 |---|---|
-| Application name | Forna Dagar Launcher |
+| GitHub App name | Forna Dagar Launcher |
 | Homepage URL | l'indirizzo di questo repository |
-| Authorization callback URL | `http://localhost` (non viene usato, ma il campo e obbligatorio) |
+| Callback URL | vuoto (se richiesto: `http://localhost`) |
+| Expire user authorization tokens | **senza spunta** (altrimenti l'accesso scade ogni 8 ore) |
+| Enable Device Flow | **con spunta** |
+| Webhook, Active | senza spunta |
+| Repository permissions > Contents | **Read-only** |
+| Where can this GitHub App be installed | Only on this account |
 
-Dopo **Register application**:
-1. Attiva **Enable Device Flow** (casella nella pagina dell'app) e salva.
-2. Copia il **Client ID** (non e un segreto). **Non serve generare nessun Client secret.**
-3. Inseriscilo in `lib/config.dart` (`githubClientId`), oppure passalo alla build con `--dart-define=GITHUB_CLIENT_ID=...`.
+Poi, dalla pagina dell'app:
+1. Copia il **Client ID** (inizia per `Iv`): non e un segreto. E gia impostato in `lib/config.dart` (`githubClientId`); si puo cambiare con `--dart-define=GITHUB_CLIENT_ID=...`. **Non generare** ne il Client secret ne la Private key: non servono.
+2. **Install App** > Install sul tuo account > *Only select repositories* > i 3 repository (`Forna_Dagar_Card_Game`, `Card_Game`, `Forna_Dagar_Launcher`).
 
 ### 2. Invitare gli amici
-In **ognuno dei 3 repository** (Settings > Collaborators > Add people), con ruolo **Read**:
-`Forna_Dagar_Card_Game`, `Card_Game`, `Forna_Dagar_Launcher`.
-Con il ruolo Read il token del launcher puo solo leggere, mai modificare. Attenzione: chi ha accesso in lettura vede anche il codice sorgente.
+In **ognuno dei 3 repository** (Settings > Collaborators > Add people). Su un account personale GitHub non offre il ruolo "Read": i collaboratori hanno accesso normale, ma il token del launcher resta in sola lettura grazie alla GitHub App. Chi ha accesso vede anche il codice sorgente.
 
-Ognuno deve avere un account GitHub (gratuito) e **accettare l'invito** (arriva per email).
+Ognuno deve avere un account GitHub (gratuito) e **accettare gli inviti** (arrivano per email).
 
 ## Pubblicare una versione
 
@@ -55,7 +58,7 @@ Per una prova usa un tag di test, es. `v0.0.1-test1`. Non servono secret.
 
 ## Prima installazione per gli amici
 
-Dopo aver accettato l'invito, dalla pagina **Releases** di `Forna_Dagar_Launcher` scaricano `forna_dagar_launcher-windows.zip`, lo scompattano in una cartella qualsiasi e avviano `forna_dagar_launcher.exe`. Poi "Accedi con GitHub" e tutto il resto e automatico.
+Dopo aver accettato gli inviti, dalla pagina **Releases** di `Forna_Dagar_Launcher` scaricano `forna_dagar_launcher-windows.zip`, lo scompattano in una cartella qualsiasi e avviano `forna_dagar_launcher.exe`. Poi "Accedi con GitHub" e tutto il resto e automatico.
 
 ## Sviluppo
 
@@ -66,7 +69,7 @@ flutter test
 flutter run -d windows
 ```
 
-Per aggiungere un gioco: una voce in `lib/config.dart` (con il suo `repo`) e il workflow `release-windows.yml` nel suo repository (con `APP_ID` uguale all'`id`).
+Per aggiungere un gioco: una voce in `lib/config.dart` (con il suo `repo`), il workflow `release-windows.yml` nel suo repository (con `APP_ID` uguale all'`id`) e l'app installata su quel repository.
 
 ## Limiti noti
 
@@ -74,3 +77,4 @@ Per aggiungere un gioco: una voce in `lib/config.dart` (con il suo `repo`) e il 
 - Le build non sono firmate: se Windows SmartScreen avvisa per il launcher, "Ulteriori informazioni > Esegui comunque". I giochi scaricati dal launcher non hanno il contrassegno di provenienza web e di norma non mostrano l'avviso.
 - Solo Windows. Android non e coperto.
 - Il salvataggio cifrato del token usa PowerShell di Windows: non e verificabile fuori da Windows.
+- Se l'opzione "Expire user authorization tokens" resta attiva, l'accesso scade dopo 8 ore e il launcher chiede di accedere di nuovo.

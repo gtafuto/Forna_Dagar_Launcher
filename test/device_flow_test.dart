@@ -79,6 +79,19 @@ void main() {
     expect(poll['grant_type'], 'urn:ietf:params:oauth:grant-type:device_code');
   });
 
+  test('GitHub App: senza scope, il parametro non viene inviato', () async {
+    final s = _FakeAuthServer(pollReplies: [
+      {'access_token': 'ghu_app'},
+    ]);
+    await s.start();
+    addTearDown(s.stop);
+    final flow = GitHubDeviceFlow(clientId: 'Iv23li', scope: '', baseUrl: s.baseUrl, intervalScale: 0.01);
+    expect(await flow.waitForToken(await flow.start()), 'ghu_app');
+    final first = s.requests.first;
+    expect(first['client_id'], 'Iv23li');
+    expect(first.containsKey('scope'), isFalse);
+  });
+
   test('"slow_down": rallenta e poi riesce', () async {
     final s = _FakeAuthServer(pollReplies: [
       {'error': 'slow_down', 'interval': 2},

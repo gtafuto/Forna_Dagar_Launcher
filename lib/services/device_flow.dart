@@ -41,7 +41,7 @@ class DeviceFlowCancelled implements Exception {
 /// Accesso a GitHub con il "Device Flow" (OAuth): il launcher mostra un codice,
 /// l'utente lo inserisce su github.com/login/device nel proprio browser e
 /// autorizza. Nessuna password passa dal launcher, e non serve nessun sito o
-/// segreto: basta il Client ID pubblico dell'OAuth App.
+/// segreto: basta il Client ID pubblico della GitHub App.
 class GitHubDeviceFlow {
   final String clientId;
   final String scope;
@@ -63,7 +63,11 @@ class GitHubDeviceFlow {
 
   /// Chiede a GitHub un nuovo codice di autorizzazione.
   Future<DeviceCodeInfo> start() async {
-    final json = await _postForm('/login/device/code', {'client_id': clientId, 'scope': scope});
+    // `scope` si invia solo se serve (OAuth App): una GitHub App non lo usa.
+    final json = await _postForm('/login/device/code', {
+      'client_id': clientId,
+      if (scope.isNotEmpty) 'scope': scope,
+    });
     _throwIfError(json);
     final deviceCode = json['device_code'];
     final userCode = json['user_code'];
@@ -120,7 +124,7 @@ class GitHubDeviceFlow {
         return;
       case 'device_flow_disabled':
         throw DeviceFlowException(
-            'Il Device Flow non e attivo nell\'OAuth App su GitHub: attivalo nelle impostazioni dell\'app.');
+            'Il Device Flow non e attivo nella GitHub App: attivalo nelle impostazioni dell\'app su GitHub.');
       case 'incorrect_client_credentials':
         throw DeviceFlowException('Il Client ID configurato nel launcher non e valido.');
       case 'expired_token':
