@@ -5,9 +5,9 @@ Piccola app Windows che permette di scegliere tra **Forna Dagar** e **Card Game*
 ## Come funziona
 
 ```
-tag v0.1.1 su un gioco --> GitHub Actions compila Windows --> Release di GitHub del repository
-                                                                 |-- <gioco>-windows.zip
-                                                                 '-- manifest.json (versione, SHA-256, dimensione)
+pubblica.ps1 sul tuo PC --> compila Windows in locale --> Release di GitHub del repository
+                                                            |-- <gioco>-windows.zip
+                                                            '-- manifest.json (versione, SHA-256, dimensione)
 Launcher --> "Accedi con GitHub" (una volta) --> legge l'ultima Release --> se la versione e diversa: "Aggiorna"
 ```
 
@@ -46,12 +46,7 @@ Ognuno deve avere un account GitHub (gratuito) e **accettare gli inviti** (arriv
 
 ## Pubblicare una versione
 
-Ci sono due modi, con lo stesso risultato (una Release di GitHub con zip e `manifest.json`). Il launcher degli utenti non vede differenze.
-
-**Cosa vede il launcher: solo `main`.** Se il commit pubblicato e contenuto in `main` la Release e "ufficiale" e gli utenti ricevono "Aggiorna". Se invece la build viene da un altro ramo (non ancora unito a `main`) la Release e marcata **pre-release**: il launcher la ignora (legge solo l'ultima Release ufficiale), resta scaricabile a mano dalla pagina Releases di GitHub e non disturba nessuno. Lo script e il workflow lo decidono da soli e lo dicono chiaramente prima di pubblicare.
-Per far arrivare una novita agli utenti: unisci il ramo in `main`, poi pubblica da `main`.
-
-### A. Dal proprio PC (consigliato: piu veloce, nessun minuto GitHub consumato)
+Si pubblica **dal proprio PC** con lo script `scripts/pubblica.ps1`, presente in ogni repository. La compilazione avviene sul tuo computer: **GitHub non compila nulla** (nessun workflow, nessun minuto di Actions consumato). Lo script crea la Release di GitHub con lo zip e il `manifest.json`, e il launcher degli utenti la trova da solo.
 
 Prerequisiti, una tantum: Flutter, Git e [GitHub CLI](https://cli.github.com) con `gh auth login`.
 
@@ -64,15 +59,8 @@ Dalla cartella del progetto (gioco o launcher), con il codice **salvato e pubbli
 Lo script controlla i prerequisiti, compila Windows, crea zip e manifest e pubblica la Release. Mostra un riepilogo e chiede conferma (`-Yes` per saltarla). Con `-NoPublish` fa tutto tranne la pubblicazione (utile per provare: i file restano in una cartella temporanea indicata a video).
 Se PowerShell blocca l'esecuzione degli script: `powershell -ExecutionPolicy Bypass -File .\scripts\pubblica.ps1 0.1.1`.
 
-### B. Su GitHub (nessun PC necessario, 4-8 minuti, consuma minuti di Actions)
-
-```
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-La build parte da sola e alla fine c'e la Release. In alternativa: scheda **Actions > Release Windows > Run workflow**.
-Per una prova usa un tag di test, es. `v0.0.1-test1`. Non servono secret.
+**Cosa vede il launcher: solo `main`.** Se il commit pubblicato e contenuto in `main` la Release e "ufficiale" e gli utenti ricevono "Aggiorna". Se invece la build viene da un altro ramo (non ancora unito a `main`) la Release e marcata **pre-release**: il launcher la ignora (legge solo l'ultima Release ufficiale), resta scaricabile a mano dalla pagina Releases di GitHub e non disturba nessuno. Lo script lo decide da solo e lo dice chiaramente prima di pubblicare.
+Per far arrivare una novita agli utenti: unisci il ramo in `main`, poi pubblica da `main`.
 
 ## Prima installazione per gli amici
 
@@ -87,7 +75,7 @@ flutter test
 flutter run -d windows
 ```
 
-Per aggiungere un gioco: una voce in `lib/config.dart` (con il suo `repo`), il workflow `release-windows.yml` nel suo repository (con `APP_ID` uguale all'`id`) e l'app installata su quel repository.
+Per aggiungere un gioco: una voce in `lib/config.dart` (con il suo `repo`), lo script `scripts/pubblica.ps1` nel suo repository (con `$AppId` uguale all'`id` e le altre tre righe di configurazione in cima) e la GitHub App installata su quel repository.
 
 ## Limiti noti
 

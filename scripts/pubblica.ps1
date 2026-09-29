@@ -4,9 +4,9 @@
   GitHub (zip + manifest.json), da cui la scarica il Forna Dagar Launcher.
 
 .DESCRIPTION
-  Alternativa alla compilazione su GitHub Actions: piu veloce (usa la cache
-  della tua compilazione locale) e non consuma i minuti gratuiti di GitHub.
-  Il launcher degli utenti funziona in modo identico.
+  La compilazione avviene su questo PC (veloce, grazie alla cache locale) e
+  GitHub non compila nulla: nessun minuto di Actions consumato. Il launcher
+  degli utenti legge la Release che questo script crea.
 
   Cosa fa, in ordine:
     1. controlla i prerequisiti e che il codice sia su GitHub e senza modifiche
