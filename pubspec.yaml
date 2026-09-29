@@ -1,0 +1,21 @@
+name: forna_dagar_launcher
+description: "Launcher per Forna Dagar e Card Game: sceglie il gioco da avviare, scarica e aggiorna le versioni pubblicate."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+# Nessuna dipendenza esterna oltre a Flutter: rete, file, hash ed estrazione
+# dello zip usano `dart:io` e gli strumenti gia presenti in Windows.
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
