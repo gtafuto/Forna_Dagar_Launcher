@@ -46,14 +46,29 @@ Ognuno deve avere un account GitHub (gratuito) e **accettare gli inviti** (arriv
 
 ## Pubblicare una versione
 
-Da un repository (gioco o launcher), sul commit che si vuole pubblicare:
+Ci sono due modi, con lo stesso risultato (una Release di GitHub con zip e `manifest.json`). Il launcher degli utenti non vede differenze.
+
+### A. Dal proprio PC (consigliato: piu veloce, nessun minuto GitHub consumato)
+
+Prerequisiti, una tantum: Flutter, Git e [GitHub CLI](https://cli.github.com) con `gh auth login`.
+
+Dalla cartella del progetto (gioco o launcher), con il codice **salvato e pubblicato** (`git push`):
+
+```
+.\scripts\pubblica.ps1 0.1.1
+```
+
+Lo script controlla i prerequisiti, compila Windows, crea zip e manifest e pubblica la Release. Mostra un riepilogo e chiede conferma (`-Yes` per saltarla). Con `-NoPublish` fa tutto tranne la pubblicazione (utile per provare: i file restano in una cartella temporanea indicata a video).
+Se PowerShell blocca l'esecuzione degli script: `powershell -ExecutionPolicy Bypass -File .\scripts\pubblica.ps1 0.1.1`.
+
+### B. Su GitHub (nessun PC necessario, 4-8 minuti, consuma minuti di Actions)
 
 ```
 git tag v0.1.1
 git push origin v0.1.1
 ```
 
-La build parte da sola (10-15 minuti) e alla fine c'e una Release con lo zip e il manifest. In alternativa: scheda **Actions > Release Windows > Run workflow**.
+La build parte da sola e alla fine c'e la Release. In alternativa: scheda **Actions > Release Windows > Run workflow**.
 Per una prova usa un tag di test, es. `v0.0.1-test1`. Non servono secret.
 
 ## Prima installazione per gli amici
