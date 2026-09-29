@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../models.dart';
+import '../services/github_client.dart';
 import '../services/install_service.dart';
 import '../services/release_service.dart';
 
@@ -9,7 +10,10 @@ import '../services/release_service.dart';
 /// pubblicato e cosa sta facendo il launcher in questo momento.
 class _GameStatus {
   ReleaseManifest? manifest;
-  bool checkFailed = false;
+
+  /// Motivo per cui non si e riusciti a controllare le versioni (rete assente,
+  /// nessun accesso al repository...), o `null` se il controllo e andato bene.
+  String? checkError;
   InstalledApp? installed;
   bool busy = false;
   InstallPhase? phase;
@@ -21,7 +25,20 @@ class _GameStatus {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final GitHubClient client;
+
+  /// Il token non e piu valido: chi ospita la pagina torna alla schermata di accesso.
+  final void Function(String message) onAuthLost;
+
+  /// L'utente ha scelto "Esci".
+  final VoidCallback onSignOut;
+
+  const HomePage({
+    super.key,
+    required this.client,
+    required this.onAuthLost,
+    required this.onSignOut,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -29,7 +46,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _installer = InstallService();
-  final _releases = ReleaseService();
+  late final _releases = ReleaseService(widget.client);
   final Map<String, _GameStatus> _status = {for (final g in games) g.id: _GameStatus()};
   bool _checking = false;
 
@@ -43,17 +60,28 @@ class _HomePageState extends State<HomePage> {
     if (_checking) return;
     setState(() => _checking = true);
     final installed = await _installer.loadState();
+    GitHubAuthException? authLost;
     await Future.wait(games.map((game) async {
       final status = _status[game.id]!;
       status.installed = installed[game.id];
       try {
-        status.manifest = await _releases.fetchLatest(game.id);
-        status.checkFailed = false;
+        status.manifest = await _releases.fetchLatest(game);
+        status.checkError = null;
+      } on GitHubAuthException catch (e) {
+        authLost = e;
+      } on GitHubApiException catch (e) {
+        status.manifest = null;
+        status.checkError = e.message;
       } catch (_) {
-        status.checkFailed = true;
+        status.manifest = null;
+        status.checkError = 'Impossibile controllare gli aggiornamenti (sei online?)';
       }
     }));
     if (!mounted) return;
+    if (authLost != null) {
+      widget.onAuthLost(authLost.toString());
+      return;
+    }
     setState(() => _checking = false);
   }
 
@@ -74,13 +102,26 @@ class _HomePageState extends State<HomePage> {
       status.progress = 0;
     });
     try {
-      await _installer.install(manifest, onProgress: (phase, fraction) {
-        if (!mounted) return;
-        setState(() {
-          status.phase = phase;
-          status.progress = fraction;
-        });
-      });
+      await _installer.install(
+        manifest,
+        download: (m, target, onProgress) => widget.client.downloadAsset(
+          m.repo,
+          m.zipAssetId,
+          target,
+          onProgress: onProgress,
+          expectedSize: m.size,
+        ),
+        onProgress: (phase, fraction) {
+          if (!mounted) return;
+          setState(() {
+            status.phase = phase;
+            status.progress = fraction;
+          });
+        },
+      );
+    } on GitHubAuthException catch (e) {
+      if (mounted) widget.onAuthLost(e.toString());
+      return;
     } catch (e) {
       status.error = e.toString();
     }
@@ -138,6 +179,11 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('Forna Dagar Launcher'),
         actions: [
+          IconButton(
+            tooltip: 'Esci da GitHub',
+            onPressed: widget.onSignOut,
+            icon: const Icon(Icons.logout),
+          ),
           IconButton(
             tooltip: 'Controlla aggiornamenti',
             onPressed: _checking ? null : _refreshAll,
@@ -198,7 +244,7 @@ class _GameCard extends StatelessWidget {
       final mb = manifest.size > 0 ? ' (${(manifest.size / (1024 * 1024)).toStringAsFixed(0)} MB)' : '';
       return 'Ultima versione: ${manifest.version}$mb';
     }
-    if (status.checkFailed) return 'Impossibile controllare gli aggiornamenti (sei online?)';
+    if (status.checkError != null) return status.checkError!;
     return 'Nessuna versione ancora pubblicata';
   }
 
