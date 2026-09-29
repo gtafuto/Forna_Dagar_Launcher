@@ -113,6 +113,12 @@ if ($dirty -gt 0) {
     if ($NoPublish) { Write-Host "ATTENZIONE: $msg" -ForegroundColor Yellow } else { Fail "$msg Fai commit e push, poi riprova." }
 }
 git fetch origin --quiet
+# Il launcher vede solo le Release "ufficiali", cioe costruite da codice gia presente in main.
+# Il resto viene pubblicato come pre-release, che il launcher ignora. (Il codice 1 di git qui
+# significa "non e su main": e una risposta, non un errore.)
+git merge-base --is-ancestor $sha origin/main
+$onMain = ($LASTEXITCODE -eq 0)
+if ($onMain) { $channel = 'main' } else { $channel = 'test' }
 $onRemote = @(git branch -r --contains $sha).Count
 if ($onRemote -eq 0) {
     $msg = "Il commit $short non e ancora su GitHub."
@@ -130,6 +136,11 @@ Write-Host "  Progetto : $AppName ($Repo)"
 Write-Host "  Ramo     : $branch"
 Write-Host "  Commit   : $short"
 Write-Host "  Versione : $Version (tag $tag)"
+if ($onMain) {
+    Write-Host '  Launcher : VISIBILE (il codice e su main: gli utenti vedranno "Aggiorna")' -ForegroundColor Green
+} else {
+    Write-Host '  Launcher : NON visibile (il commit non e su main: sara una pre-release, scaricabile solo a mano)' -ForegroundColor Yellow
+}
 if ($NoPublish) { Write-Host '  MODALITA PROVA: non viene pubblicato nulla' -ForegroundColor Yellow }
 if (-not $Yes) {
     $answer = Read-Host 'Procedo? (s/N)'
@@ -172,7 +183,8 @@ $manifest = [ordered]@{
     version = $Version
     exe     = $ExeName
     asset   = $zipName
-    sha256  = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+    channel = $channel
+    sha256  =(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
     size    = [int64]$item.Length
     commit  = $sha
 } | ConvertTo-Json
@@ -188,8 +200,14 @@ if ($NoPublish) {
 # ---- 4. Pubblicazione ----
 Step 'Pubblicazione della Release su GitHub'
 if (-not $Notes) { $Notes = "Build di $AppName $Version dal commit $short." }
+if ($onMain) {
+    $visibility = '--latest'
+} else {
+    $visibility = '--prerelease'
+    $Notes = "PRE-RELEASE DI PROVA (commit non su main, invisibile al launcher). $Notes"
+}
 $title = "$AppName $Version"
-Run-Native 'La creazione della Release' { gh release create $tag $zip $manifestFile --repo $Repo --title $title --notes $Notes --target $sha }
+Run-Native 'La creazione della Release' { gh release create $tag $zip $manifestFile --repo $Repo --title $title --notes $Notes --target $sha $visibility }
 
 $names = gh release view $tag --repo $Repo --json assets --jq '.assets[].name'
 foreach ($expected in $zipName, 'manifest.json') {
@@ -202,4 +220,8 @@ Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ''
 Write-Host "FATTO: $AppName $Version pubblicato in $([math]::Round($watch.Elapsed.TotalMinutes, 1)) minuti." -ForegroundColor Green
 Write-Host "https://github.com/$Repo/releases/tag/$tag"
-Write-Host 'Gli utenti vedono "Aggiorna" nel launcher (Controlla aggiornamenti).'
+if ($onMain) {
+    Write-Host 'Gli utenti vedono "Aggiorna" nel launcher (Controlla aggiornamenti).'
+} else {
+    Write-Host 'ATTENZIONE: e una pre-release, il launcher NON la mostra agli utenti.' -ForegroundColor Yellow
+}

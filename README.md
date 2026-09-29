@@ -48,6 +48,9 @@ Ognuno deve avere un account GitHub (gratuito) e **accettare gli inviti** (arriv
 
 Ci sono due modi, con lo stesso risultato (una Release di GitHub con zip e `manifest.json`). Il launcher degli utenti non vede differenze.
 
+**Cosa vede il launcher: solo `main`.** Se il commit pubblicato e contenuto in `main` la Release e "ufficiale" e gli utenti ricevono "Aggiorna". Se invece la build viene da un altro ramo (non ancora unito a `main`) la Release e marcata **pre-release**: il launcher la ignora (legge solo l'ultima Release ufficiale), resta scaricabile a mano dalla pagina Releases di GitHub e non disturba nessuno. Lo script e il workflow lo decidono da soli e lo dicono chiaramente prima di pubblicare.
+Per far arrivare una novita agli utenti: unisci il ramo in `main`, poi pubblica da `main`.
+
 ### A. Dal proprio PC (consigliato: piu veloce, nessun minuto GitHub consumato)
 
 Prerequisiti, una tantum: Flutter, Git e [GitHub CLI](https://cli.github.com) con `gh auth login`.

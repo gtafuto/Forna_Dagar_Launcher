@@ -12,6 +12,11 @@ name: Release Windows
 # Non servono secret: usa il token automatico di GitHub Actions
 # (`permissions: contents: write`, solo per questo repository).
 #
+# VISIBILITA NEL LAUNCHER: il launcher legge solo l'ultima Release "ufficiale".
+# Se il commit e contenuto in `main` la Release e ufficiale (--latest); se non lo
+# e (build provata da un altro ramo) viene marcata "pre-release", che il launcher
+# ignora: resta scaricabile a mano da GitHub ma nessun utente riceve "Aggiorna".
+#
 # La Release contiene due allegati:
 #   <APP_ID>-windows.zip   la cartella di build di Windows
 #   manifest.json          versione, eseguibile, SHA-256 e dimensione dello zip
@@ -39,6 +44,25 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # storia completa: serve a sapere se il commit e su main
+
+      - name: Controlla se il codice e su main
+        shell: pwsh
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          git merge-base --is-ancestor $env:COMMIT_SHA origin/main
+          if ($LASTEXITCODE -eq 0) { $onMain = 'true'; $channel = 'main' } else { $onMain = 'false'; $channel = 'test' }
+          "ON_MAIN=$onMain" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CHANNEL=$channel" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if ($onMain -eq 'true') {
+            Write-Host 'Il commit e su main: la Release sara visibile nel launcher.'
+          } else {
+            Write-Host 'ATTENZIONE: il commit NON e su main: la Release sara una pre-release, invisibile al launcher.'
+          }
+          # "non e su main" fa uscire git con codice 1: e una risposta, non un errore del passo.
+          exit 0
 
       - name: Controlla la versione
         shell: pwsh
@@ -86,6 +110,7 @@ jobs:
             version = $env:VERSION
             exe     = $env:EXE_NAME
             asset   = $zipName
+            channel = $env:CHANNEL
             sha256  = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
             size    = [int64]$item.Length
             commit  = $env:COMMIT_SHA
@@ -104,7 +129,9 @@ jobs:
         run: |
           $tag = "v$env:VERSION"
           $notes = "Build automatica di $env:APP_NAME $env:VERSION (commit $($env:COMMIT_SHA.Substring(0, 7)))."
-          gh release create $tag $env:ZIP_PATH $env:MANIFEST_PATH --title "$env:APP_NAME $env:VERSION" --notes $notes --target $env:COMMIT_SHA
+          # Su main: Release ufficiale (la vede il launcher). Altrove: pre-release (il launcher la ignora).
+          if ($env:ON_MAIN -eq 'true') { $visibility = '--latest' } else { $visibility = '--prerelease'; $notes = "PRE-RELEASE DI PROVA (commit non su main, invisibile al launcher). $notes" }
+          gh release create $tag $env:ZIP_PATH $env:MANIFEST_PATH --title "$env:APP_NAME $env:VERSION" --notes $notes --target $env:COMMIT_SHA $visibility
           if ($LASTEXITCODE -ne 0) { throw "Creazione della Release fallita." }
 
           # Verifica: la Release deve contenere i due allegati attesi.
@@ -113,5 +140,6 @@ jobs:
           foreach ($expected in "$env:APP_ID-windows.zip", 'manifest.json') {
             if ($names -notcontains $expected) { throw "Manca l'allegato $expected nella Release." }
           }
-          "### $env:APP_NAME $env:VERSION pubblicato`n- Release: $tag`n- Allegati: $($names -join ', ')" |
+          if ($env:ON_MAIN -eq 'true') { $seen = 'SI (il commit e su main)' } else { $seen = 'NO (pre-release, il commit non e su main)' }
+          "### $env:APP_NAME $env:VERSION pubblicato`n- Release: $tag`n- Visibile nel launcher: $seen`n- Allegati: $($names -join ', ')" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
