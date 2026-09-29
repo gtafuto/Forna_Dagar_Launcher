@@ -2,6 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models.dart';
+import 'sha256.dart';
+
+/// Scarica lo zip di [manifest] in [target], riportando l'avanzamento (0-1, o
+/// `null` se non noto). Fornito dall'esterno: oggi e il download da GitHub.
+typedef AssetDownloader = Future<void> Function(
+  ReleaseManifest manifest,
+  File target,
+  void Function(double? fraction) onProgress,
+);
 
 /// Errore di installazione con un messaggio gia pronto per l'utente.
 class InstallException implements Exception {
@@ -31,11 +40,11 @@ enum InstallPhase { downloading, verifying, extracting }
 class InstallService {
   final Directory root;
 
-  InstallService({Directory? root}) : root = root ?? _defaultRoot();
+  InstallService({Directory? root}) : root = root ?? defaultRoot();
 
   static final _sep = Platform.pathSeparator;
 
-  static Directory _defaultRoot() {
+  static Directory defaultRoot() {
     final env = Platform.environment;
     final base = env['LOCALAPPDATA'] ?? env['HOME'] ?? Directory.systemTemp.path;
     return Directory('$base${_sep}FornaDagarLauncher');
@@ -76,6 +85,7 @@ class InstallService {
   /// sul disco la riusa senza riscaricarla.
   Future<void> install(
     ReleaseManifest manifest, {
+    required AssetDownloader download,
     void Function(InstallPhase phase, double? fraction)? onProgress,
   }) async {
     final appDir = Directory(_join(_join(root.path, 'apps'), manifest.id));
@@ -92,14 +102,12 @@ class InstallService {
       final zip = File(_join(_join(root.path, 'downloads'), '${manifest.id}-${manifest.version}.zip'));
       await zip.parent.create(recursive: true);
       try {
-        await _download(
-          manifest.url,
-          zip,
-          expectedSize: manifest.size,
-          onProgress: (f) => onProgress?.call(InstallPhase.downloading, f),
-        );
+        await download(manifest, zip, (f) => onProgress?.call(InstallPhase.downloading, f));
         onProgress?.call(InstallPhase.verifying, null);
-        final hash = await _sha256(zip);
+        if (manifest.size > 0 && await zip.length() != manifest.size) {
+          throw InstallException('Download incompleto o file diverso da quello pubblicato. Riprova.');
+        }
+        final hash = await sha256OfFile(zip);
         if (hash != manifest.sha256) {
           throw InstallException('Il file scaricato risulta danneggiato (controllo di integrita fallito). Riprova.');
         }
@@ -160,61 +168,7 @@ class InstallService {
     );
   }
 
-  Future<void> _download(
-    String url,
-    File target, {
-    required int expectedSize,
-    required void Function(double? fraction) onProgress,
-  }) async {
-    final part = File('${target.path}.part');
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
-    try {
-      final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        throw InstallException('Download non riuscito (errore ${response.statusCode}).');
-      }
-      final total = response.contentLength > 0 ? response.contentLength : expectedSize;
-      var received = 0;
-      final sink = part.openWrite();
-      try {
-        await for (final chunk in response) {
-          sink.add(chunk);
-          received += chunk.length;
-          onProgress(total > 0 ? (received / total).clamp(0.0, 1.0) : null);
-        }
-      } finally {
-        await sink.close();
-      }
-      if (expectedSize > 0 && received != expectedSize) {
-        throw InstallException('Download incompleto ($received di $expectedSize byte). Riprova.');
-      }
-      if (await target.exists()) await target.delete();
-      await part.rename(target.path);
-    } on SocketException {
-      throw InstallException('Connessione assente o interrotta durante il download.');
-    } on HttpException catch (e) {
-      throw InstallException('Download non riuscito: ${e.message}');
-    } finally {
-      client.close(force: true);
-    }
-  }
-
   static String _ps(String s) => s.replaceAll("'", "''");
-
-  Future<String> _sha256(File file) async {
-    final result = await Process.run('powershell', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      "(Get-FileHash -LiteralPath '${_ps(file.path)}' -Algorithm SHA256).Hash",
-    ]);
-    if (result.exitCode != 0) {
-      throw InstallException('Impossibile verificare il file scaricato: ${result.stderr}');
-    }
-    return (result.stdout as String).trim().toLowerCase();
-  }
 
   Future<void> _extract(File zip, Directory destination) async {
     await destination.create(recursive: true);

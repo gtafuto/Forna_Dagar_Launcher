@@ -1,4 +1,44 @@
-/// Manifest dell'ultima versione pubblicata di un gioco (`latest.json`).
+/// Un file allegato a una Release di GitHub.
+class ReleaseAsset {
+  final int id;
+  final String name;
+  final int size;
+
+  const ReleaseAsset({required this.id, required this.name, required this.size});
+
+  factory ReleaseAsset.fromJson(Map<String, dynamic> json) => ReleaseAsset(
+        id: (json['id'] as num).toInt(),
+        name: json['name'] as String,
+        size: (json['size'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Ultima Release di un repository, con i suoi allegati.
+class ReleaseInfo {
+  final String tagName;
+  final List<ReleaseAsset> assets;
+
+  const ReleaseInfo({required this.tagName, required this.assets});
+
+  factory ReleaseInfo.fromJson(Map<String, dynamic> json) => ReleaseInfo(
+        tagName: json['tag_name'] as String? ?? '',
+        assets: [
+          for (final a in json['assets'] as List<dynamic>? ?? const [])
+            ReleaseAsset.fromJson(a as Map<String, dynamic>),
+        ],
+      );
+
+  ReleaseAsset? assetNamed(String name) {
+    for (final a in assets) {
+      if (a.name == name) return a;
+    }
+    return null;
+  }
+}
+
+/// Descrizione dell'ultima versione pubblicata di un gioco: il contenuto del
+/// file `manifest.json` allegato alla Release, piu i riferimenti per scaricare
+/// lo zip da GitHub.
 class ReleaseManifest {
   final String id;
   final String name;
@@ -6,31 +46,45 @@ class ReleaseManifest {
 
   /// Nome del file eseguibile dentro lo zip (es. `card_game.exe`).
   final String exe;
-  final String url;
   final String sha256;
   final int size;
-  final DateTime? publishedAt;
+
+  /// Repository che ha pubblicato la Release (`proprietario/nome`).
+  final String repo;
+
+  /// Identificativo GitHub dell'allegato zip, da cui scaricare.
+  final int zipAssetId;
 
   const ReleaseManifest({
     required this.id,
     required this.name,
     required this.version,
     required this.exe,
-    required this.url,
     required this.sha256,
     required this.size,
-    this.publishedAt,
+    required this.repo,
+    required this.zipAssetId,
   });
 
-  factory ReleaseManifest.fromJson(Map<String, dynamic> json) => ReleaseManifest(
+  /// Nome dell'allegato zip indicato dal manifest (`asset`), con il valore
+  /// predefinito che usa il workflow di release.
+  static String zipNameIn(Map<String, dynamic> json) =>
+      json['asset'] as String? ?? '${json['id']}-windows.zip';
+
+  factory ReleaseManifest.fromJson(
+    Map<String, dynamic> json, {
+    required String repo,
+    required int zipAssetId,
+  }) =>
+      ReleaseManifest(
         id: json['id'] as String,
         name: json['name'] as String? ?? json['id'] as String,
         version: json['version'] as String,
         exe: json['exe'] as String,
-        url: json['url'] as String,
         sha256: (json['sha256'] as String).toLowerCase(),
         size: (json['size'] as num?)?.toInt() ?? 0,
-        publishedAt: DateTime.tryParse(json['published_at'] as String? ?? ''),
+        repo: repo,
+        zipAssetId: zipAssetId,
       );
 }
 
