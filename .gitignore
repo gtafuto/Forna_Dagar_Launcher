@@ -6,7 +6,6 @@ build/
 .flutter-plugins-dependencies
 *.iml
 .idea/
-pubspec.lock
 
 # File generati da flutter al primo build locale, non vanno committati
 /windows/flutter/ephemeral/
