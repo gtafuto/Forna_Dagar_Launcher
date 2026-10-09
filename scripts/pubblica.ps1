@@ -18,7 +18,9 @@
   e l'accesso con:  gh auth login
 
 .PARAMETER Version
-  Versione da pubblicare, senza la "v" (es. 0.1.1 oppure 0.1.1-test1).
+  Versione da pubblicare, senza la "v" (es. 0.1.1 oppure 0.1.1-test1). Facoltativo: se
+  omesso, la calcola da solo incrementando la patch della versione in pubspec.yaml
+  (es. 0.1.0 -> 0.1.1).
 
 .PARAMETER Notes
   Testo della Release (facoltativo).
@@ -30,13 +32,17 @@
   Prova: compila e prepara zip e manifest, ma non pubblica nulla.
 
 .EXAMPLE
+  .\scripts\pubblica.ps1
+  (incrementa da solo la versione in pubspec.yaml e pubblica)
+
+.EXAMPLE
   .\scripts\pubblica.ps1 0.1.1
 
 .EXAMPLE
   .\scripts\pubblica.ps1 0.1.1-test1 -NoPublish
 #>
 param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [Parameter(Position = 0)]
     [string]$Version,
     [string]$Notes,
     [switch]$Yes,
@@ -95,10 +101,36 @@ if (-not $NoPublish) {
     }
 }
 
+$pubspecPath = Join-Path $root 'pubspec.yaml'
+$versionLine = Get-Content $pubspecPath | Where-Object { $_ -match '^version:\s*(\S+)' } | Select-Object -First 1
+if (-not $versionLine) { Fail "Non trovo la riga 'version:' in pubspec.yaml." }
+$currentVersion = (($versionLine -replace '^version:\s*', '') -replace '\+.*$', '').Trim()
+
+if (-not $Version) {
+    if ($currentVersion -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+        Fail "La versione in pubspec.yaml ('$currentVersion') non e nel formato X.Y.Z: indica la versione da pubblicare a mano."
+    }
+    $Version = "$($Matches[1]).$($Matches[2]).$([int]$Matches[3] + 1)"
+    Write-Host "Nessuna versione indicata: la calcolo da pubspec.yaml ($currentVersion -> $Version)." -ForegroundColor Yellow
+}
+
 if ($Version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.]+)?$') {
     Fail "Versione non valida: '$Version' (atteso es. 0.1.1 oppure 0.1.1-test1)."
 }
 $tag = "v$Version"
+
+# Una versione "piena" (senza suffisso -test/-rc) aggiorna pubspec.yaml: e quella che il
+# prossimo lancio dello script usera come base per calcolare la versione successiva.
+$isProdVersion = $Version -match '^\d+\.\d+\.\d+$'
+if ($isProdVersion -and $currentVersion -match '^\d+\.\d+\.\d+$') {
+    $newParts = $Version -split '\.' | ForEach-Object { [int]$_ }
+    $curParts = $currentVersion -split '\.' | ForEach-Object { [int]$_ }
+    $cmp = 0
+    for ($i = 0; $i -lt 3 -and $cmp -eq 0; $i++) { $cmp = $newParts[$i] - $curParts[$i] }
+    if ($cmp -le 0) {
+        Fail "La versione $Version non e maggiore di quella tracciata in pubspec.yaml ($currentVersion): scegli una versione piu alta, altrimenti il launcher non rileva l'aggiornamento."
+    }
+}
 
 # ---- Stato del repository ----
 Step 'Controllo del repository'
@@ -214,6 +246,15 @@ foreach ($expected in $zipName, 'manifest.json') {
     if ($names -notcontains $expected) {
         Fail "Manca l'allegato $expected nella Release: controlla su GitHub."
     }
+}
+
+if ($isProdVersion) {
+    Step 'Aggiornamento della versione in pubspec.yaml'
+    $newContent = (Get-Content $pubspecPath -Raw) -replace '(?m)^version:\s*\S+', "version: $Version"
+    [System.IO.File]::WriteAllText($pubspecPath, $newContent, (New-Object System.Text.UTF8Encoding($false)))
+    Run-Native 'git add' { git add pubspec.yaml }
+    Run-Native 'git commit' { git commit -m "Aggiorna versione a $Version" }
+    Run-Native 'git push' { git push origin $branch }
 }
 
 Remove-Item $out -Recurse -Force -ErrorAction SilentlyContinue
