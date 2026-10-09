@@ -53,14 +53,27 @@ void main() {
   });
 
   group('InstalledApp', () {
-    test('salva e rilegge versione corrente e precedente', () {
+    test('salva e rilegge versione corrente, archivio e note', () {
       const app = InstalledApp(
         current: InstalledVersion(version: '0.1.2', exe: 'a.exe', dir: 'C:\\x\\0.1.2'),
-        previous: InstalledVersion(version: '0.1.1', exe: 'a.exe', dir: 'C:\\x\\0.1.1'),
+        archive: [
+          InstalledVersion(version: '0.1.1', exe: 'a.exe', dir: 'C:\\x\\0.1.1', notes: 'Note 1'),
+          InstalledVersion(version: '0.1.0', exe: 'a.exe', dir: 'C:\\x\\0.1.0'),
+        ],
       );
       final back = InstalledApp.fromJson(jsonDecode(jsonEncode(app.toJson())) as Map<String, dynamic>);
       expect(back.current.version, '0.1.2');
       expect(back.previous?.version, '0.1.1');
+      expect(back.archive.map((v) => v.version), ['0.1.1', '0.1.0']);
+      expect(back.archive.first.notes, 'Note 1');
+    });
+
+    test('legge anche il vecchio formato con la sola versione "previous"', () {
+      final back = InstalledApp.fromJson({
+        'current': {'version': '0.1.2', 'exe': 'a.exe', 'dir': 'C:\\x\\0.1.2'},
+        'previous': {'version': '0.1.1', 'exe': 'a.exe', 'dir': 'C:\\x\\0.1.1'},
+      });
+      expect(back.archive.map((v) => v.version), ['0.1.1']);
     });
   });
 

@@ -13,7 +13,7 @@ Launcher --> "Accedi con GitHub" (una volta) --> legge l'ultima Release --> se l
 
 - I repository sono **privati**: il launcher scarica con l'accesso GitHub di ciascun utente (nessuna password passa dal launcher, e nessun token va copiato a mano).
 - L'accesso avviene tramite una **GitHub App** con il solo permesso di **lettura dei contenuti**: il token non puo mai modificare i repository, nemmeno per un utente che ne e collaboratore con diritto di scrittura.
-- Ogni versione va in una cartella propria (`%LOCALAPPDATA%\FornaDagarLauncher\apps\<gioco>\<versione>\`): si puo aggiornare anche a gioco aperto e la versione precedente resta per il ripristino ("Torna alla ...").
+- Ogni versione va in una cartella propria (`%LOCALAPPDATA%\FornaDagarLauncher\apps\<gioco>\<versione>\`): si puo aggiornare anche a gioco aperto e le ultime 5 versioni precedenti restano nell'**Archivio** (con le loro note) per tornare a una qualsiasi. Il tasto **Note della patch** mostra cosa contiene la versione: il testo viene dal campo `notes` del `manifest.json` (da `pubblica.ps1 -Notes "..."`, altrimenti una nota automatica).
 - Mazzi e impostazioni non stanno in quelle cartelle (i giochi li salvano in Documenti): un aggiornamento non li tocca.
 - Lo zip scaricato viene verificato (dimensione e SHA-256) prima dell'installazione.
 - Il token di accesso e salvato **cifrato con la protezione di Windows**: e leggibile solo dallo stesso utente sullo stesso PC.

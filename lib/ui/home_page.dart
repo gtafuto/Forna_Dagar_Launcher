@@ -147,30 +147,88 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _rollback(GameEntry game) async {
+  static const _noNotes = 'Nessuna nota disponibile per questa versione.';
+
+  /// Archivio: tutte le versioni precedenti conservate, con le loro note, e la
+  /// possibilita di tornare a una qualsiasi.
+  Future<void> _openArchive(GameEntry game) async {
     final status = _status[game.id]!;
-    final previous = status.installed?.previous;
-    if (previous == null) return;
-    final confirmed = await showDialog<bool>(
+    final archive = status.installed?.archive ?? const <InstalledVersion>[];
+    if (archive.isEmpty) return;
+    final chosen = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Tornare alla versione precedente?'),
-        content: Text('${game.title} tornera alla versione ${previous.version}. '
-            'I tuoi mazzi e le tue impostazioni non vengono toccati.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annulla')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Torna indietro')),
-        ],
+        title: Text('Archivio - ${game.title}'),
+        content: SizedBox(
+          width: 480,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Text('I tuoi mazzi e le tue impostazioni non vengono toccati quando cambi versione.'),
+              const SizedBox(height: 8),
+              for (final v in archive)
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text('Versione ${v.version}'),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SelectableText(v.notes ?? _noNotes),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonal(
+                        onPressed: () => Navigator.pop(context, v.version),
+                        child: Text('Torna alla ${v.version}'),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Chiudi'))],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (chosen == null || !mounted) return;
     setState(() => status.error = null);
     try {
-      await _installer.rollback(game.id);
+      await _installer.switchTo(game.id, chosen);
     } catch (e) {
       status.error = e.toString();
     }
     await _reloadInstalled(game.id);
+  }
+
+  /// Note della patch: della versione in uso e, se c'e un aggiornamento, di quella nuova.
+  Future<void> _showNotes(GameEntry game) async {
+    final status = _status[game.id]!;
+    final installed = status.installed;
+    if (installed == null) return;
+    final manifest = status.manifest;
+    final entries = <(String, String?)>[
+      if (status.updateAvailable && manifest != null) ('Nuova versione ${manifest.version}', manifest.notes),
+      ('Versione installata ${installed.current.version}', installed.current.notes),
+    ];
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Note della patch - ${game.title}'),
+        content: SizedBox(
+          width: 480,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final (title, notes) in entries) ...[
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
+                SelectableText(notes ?? _noNotes),
+                const SizedBox(height: 16),
+              ],
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Chiudi'))],
+      ),
+    );
   }
 
   @override
@@ -207,7 +265,8 @@ class _HomePageState extends State<HomePage> {
                     status: _status[game.id]!,
                     onInstall: () => _installOrUpdate(game),
                     onLaunch: () => _launch(game),
-                    onRollback: () => _rollback(game),
+                    onArchive: () => _openArchive(game),
+                    onNotes: () => _showNotes(game),
                   ),
                 ),
             ],
@@ -223,14 +282,16 @@ class _GameCard extends StatelessWidget {
   final _GameStatus status;
   final VoidCallback onInstall;
   final VoidCallback onLaunch;
-  final VoidCallback onRollback;
+  final VoidCallback onArchive;
+  final VoidCallback onNotes;
 
   const _GameCard({
     required this.game,
     required this.status,
     required this.onInstall,
     required this.onLaunch,
-    required this.onRollback,
+    required this.onArchive,
+    required this.onNotes,
   });
 
   String get _installedText {
@@ -316,11 +377,9 @@ class _GameCard extends StatelessWidget {
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Avvia'),
                       ),
-                    if (installed.previous != null)
-                      TextButton(
-                        onPressed: onRollback,
-                        child: Text('Torna alla ${installed.previous!.version}'),
-                      ),
+                    TextButton(onPressed: onNotes, child: const Text('Note della patch')),
+                    if (installed.archive.isNotEmpty)
+                      TextButton(onPressed: onArchive, child: const Text('Archivio')),
                   ],
                 ],
               ),

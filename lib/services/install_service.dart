@@ -28,16 +28,19 @@ enum InstallPhase { downloading, verifying, extracting }
 ///
 /// Struttura su disco (in `%LOCALAPPDATA%\FornaDagarLauncher`):
 /// ```
-/// state.json                       versioni installate (corrente + precedente)
+/// state.json                       versioni installate (corrente + archivio)
 /// downloads/                       zip in scaricamento (temporanei)
 /// apps/<id>/<versione>/<exe>       ogni versione in una cartella propria
 /// ```
 /// Una nuova versione va sempre in una cartella nuova: quella in uso non
-/// viene mai sovrascritta (si puo aggiornare anche a gioco aperto) e la
-/// precedente resta disponibile per il ripristino. I dati dell'utente (mazzi,
+/// viene mai sovrascritta (si puo aggiornare anche a gioco aperto) e le
+/// precedenti (fino a [maxArchive]) restano nell'archivio per il ripristino. I dati dell'utente (mazzi,
 /// impostazioni) non sono dentro queste cartelle: i giochi li salvano in
 /// Documenti, quindi sopravvivono a ogni aggiornamento.
 class InstallService {
+  /// Quante versioni vecchie si conservano sul disco, oltre a quella in uso.
+  static const maxArchive = 5;
+
   final Directory root;
 
   InstallService({Directory? root}) : root = root ?? defaultRoot();
@@ -127,31 +130,55 @@ class InstallService {
 
     final state = await loadState();
     final old = state[manifest.id];
-    final installed = InstalledVersion(version: manifest.version, exe: manifest.exe, dir: finalDir.path);
-    // Se si reinstalla la stessa versione, la "precedente" non cambia.
-    final previous = old == null
-        ? null
-        : (old.current.version == manifest.version ? old.previous : old.current);
-    final updated = InstalledApp(current: installed, previous: previous);
-    state[manifest.id] = updated;
+    // Reinstallando la stessa versione si tengono le note gia salvate se il
+    // manifest non ne ha.
+    final keptNotes = old != null && old.current.version == manifest.version ? old.current.notes : null;
+    final installed = InstalledVersion(
+      version: manifest.version,
+      exe: manifest.exe,
+      dir: finalDir.path,
+      notes: manifest.notes ?? keptNotes,
+    );
+    // La versione che si lascia entra in cima all'archivio; se si reinstalla
+    // la stessa versione l'archivio non cambia. Oltre [maxArchive] le piu
+    // vecchie vengono eliminate dal disco.
+    final archive = <InstalledVersion>[];
+    if (old != null) {
+      if (old.current.version != manifest.version) archive.add(old.current);
+      archive.addAll(old.archive.where((v) => v.version != manifest.version));
+    }
+    if (archive.length > maxArchive) archive.removeRange(maxArchive, archive.length);
+    state[manifest.id] = InstalledApp(current: installed, archive: archive);
     await _saveState(state);
-    await _cleanup(appDir, keep: {installed.dir, if (previous != null) previous.dir});
+    await _cleanup(appDir, keep: {installed.dir, for (final v in archive) v.dir});
   }
 
-  /// Torna alla versione precedente (la corrente diventa la "precedente", cosi
-  /// si puo anche rifare il passo).
-  Future<void> rollback(String gameId) async {
+  /// Passa alla versione [version] dell'archivio: la corrente prende il suo
+  /// posto in cima all'archivio, cosi si puo sempre rifare il passo.
+  Future<void> switchTo(String gameId, String version) async {
     final state = await loadState();
     final app = state[gameId];
-    final previous = app?.previous;
-    if (app == null || previous == null) {
+    final target = app?.archive.where((v) => v.version == version).firstOrNull;
+    if (app == null || target == null) {
+      throw InstallException('La versione $version non e nell\'archivio.');
+    }
+    if (!await File(_join(target.dir, target.exe)).exists()) {
+      throw InstallException('I file della versione $version non ci sono piu sul disco.');
+    }
+    state[gameId] = InstalledApp(
+      current: target,
+      archive: [app.current, ...app.archive.where((v) => v.version != version)],
+    );
+    await _saveState(state);
+  }
+
+  /// Torna alla versione precedente.
+  Future<void> rollback(String gameId) async {
+    final previous = (await loadState())[gameId]?.previous;
+    if (previous == null) {
       throw InstallException('Nessuna versione precedente disponibile.');
     }
-    if (!await File(_join(previous.dir, previous.exe)).exists()) {
-      throw InstallException('I file della versione precedente non ci sono piu sul disco.');
-    }
-    state[gameId] = InstalledApp(current: previous, previous: app.current);
-    await _saveState(state);
+    await switchTo(gameId, previous.version);
   }
 
   /// Avvia il gioco e lo lascia indipendente dal launcher.

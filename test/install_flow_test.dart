@@ -21,7 +21,7 @@ void main() {
   tearDown(() => tmp.deleteSync(recursive: true));
 
   /// Crea un archivio con un "eseguibile" e ne torna il manifest.
-  Future<({ReleaseManifest manifest, File archive})> makePackage(String version, {String? sha, int? size}) async {
+  Future<({ReleaseManifest manifest, File archive})> makePackage(String version, {String? sha, int? size, String? notes}) async {
     final content = Directory('${tmp.path}${sep}pkg_$version')..createSync();
     File('${content.path}${sep}gioco.exe').writeAsStringSync('eseguibile $version');
     final archive = File('${tmp.path}${sep}gioco_$version.zip');
@@ -38,6 +38,7 @@ void main() {
       size: size ?? await archive.length(),
       repo: 'o/r',
       zipAssetId: 1,
+      notes: notes,
     );
     return (manifest: manifest, archive: archive);
   }
@@ -63,7 +64,10 @@ void main() {
     expect(Directory('${installer.root.path}${sep}downloads').listSync(), isEmpty);
   });
 
-  test('aggiorna: la versione corrente diventa la precedente, le piu vecchie vengono eliminate', () async {
+  Set<String> versionsOnDisk() =>
+      Directory('${installer.root.path}${sep}apps${sep}gioco').listSync().map((e) => e.path.split(sep).last).toSet();
+
+  test('aggiorna: la versione corrente entra nell\'archivio, anche le piu vecchie restano', () async {
     for (final v in ['0.1.0', '0.1.1', '0.1.2']) {
       final pkg = await makePackage(v);
       await installer.install(pkg.manifest, download: copyFrom(pkg.archive));
@@ -71,11 +75,47 @@ void main() {
     final app = (await installer.loadState())['gioco']!;
     expect(app.current.version, '0.1.2');
     expect(app.previous?.version, '0.1.1');
+    expect([for (final v in app.archive) v.version], ['0.1.1', '0.1.0']);
     expect(exeOf(app.current).existsSync(), isTrue);
-    expect(exeOf(app.previous!).existsSync(), isTrue);
-    // La 0.1.0 non serve piu e non deve occupare spazio.
-    final versions = Directory('${installer.root.path}${sep}apps${sep}gioco').listSync().map((e) => e.path.split(sep).last).toSet();
-    expect(versions, {'0.1.1', '0.1.2'});
+    for (final v in app.archive) {
+      expect(exeOf(v).existsSync(), isTrue);
+    }
+    expect(versionsOnDisk(), {'0.1.0', '0.1.1', '0.1.2'});
+  });
+
+  test('archivio: oltre il limite le versioni piu vecchie vengono eliminate dal disco', () async {
+    final all = [for (var i = 0; i <= InstallService.maxArchive + 1; i++) '0.1.$i'];
+    for (final v in all) {
+      final pkg = await makePackage(v);
+      await installer.install(pkg.manifest, download: copyFrom(pkg.archive));
+    }
+    final app = (await installer.loadState())['gioco']!;
+    expect(app.current.version, all.last);
+    expect(app.archive.length, InstallService.maxArchive);
+    expect(app.archive.last.version, '0.1.1');
+    expect(versionsOnDisk(), all.skip(1).toSet());
+  });
+
+  test('archivio: si puo tornare a una versione qualsiasi e la corrente va in cima', () async {
+    for (final v in ['0.1.0', '0.1.1', '0.1.2']) {
+      final pkg = await makePackage(v);
+      await installer.install(pkg.manifest, download: copyFrom(pkg.archive));
+    }
+    await installer.switchTo('gioco', '0.1.0');
+    final app = (await installer.loadState())['gioco']!;
+    expect(app.current.version, '0.1.0');
+    expect([for (final v in app.archive) v.version], ['0.1.2', '0.1.1']);
+    await expectLater(installer.switchTo('gioco', '9.9.9'), throwsA(isA<InstallException>()));
+  });
+
+  test('note della patch: salvate con la versione e conservate nell\'archivio', () async {
+    final v0 = await makePackage('0.1.0', notes: 'Prima versione');
+    await installer.install(v0.manifest, download: copyFrom(v0.archive));
+    final v1 = await makePackage('0.1.1');
+    await installer.install(v1.manifest, download: copyFrom(v1.archive));
+    final app = (await installer.loadState())['gioco']!;
+    expect(app.current.notes, isNull);
+    expect(app.archive.single.notes, 'Prima versione');
   });
 
   test('hash diverso da quello pubblicato: errore, nessuna installazione', () async {

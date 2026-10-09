@@ -55,6 +55,9 @@ class ReleaseManifest {
   /// Identificativo GitHub dell'allegato zip, da cui scaricare.
   final int zipAssetId;
 
+  /// Note della patch (campo `notes` del manifest); assente nelle release piu vecchie.
+  final String? notes;
+
   const ReleaseManifest({
     required this.id,
     required this.name,
@@ -64,6 +67,7 @@ class ReleaseManifest {
     required this.size,
     required this.repo,
     required this.zipAssetId,
+    this.notes,
   });
 
   /// Nome dell'allegato zip indicato dal manifest (`asset`), con il valore
@@ -85,6 +89,7 @@ class ReleaseManifest {
         size: (json['size'] as num?)?.toInt() ?? 0,
         repo: repo,
         zipAssetId: zipAssetId,
+        notes: (json['notes'] as String?)?.trim(),
       );
 }
 
@@ -96,34 +101,54 @@ class InstalledVersion {
   /// Cartella che contiene l'eseguibile.
   final String dir;
 
-  const InstalledVersion({required this.version, required this.exe, required this.dir});
+  /// Note della patch, salvate all'installazione (anche per l'uso offline).
+  final String? notes;
+
+  const InstalledVersion({required this.version, required this.exe, required this.dir, this.notes});
 
   factory InstalledVersion.fromJson(Map<String, dynamic> json) => InstalledVersion(
         version: json['version'] as String,
         exe: json['exe'] as String,
         dir: json['dir'] as String,
-      );
-
-  Map<String, dynamic> toJson() => {'version': version, 'exe': exe, 'dir': dir};
-}
-
-/// Stato locale di un gioco: la versione in uso e, se c'e, quella precedente
-/// tenuta per poter tornare indietro con un clic.
-class InstalledApp {
-  final InstalledVersion current;
-  final InstalledVersion? previous;
-
-  const InstalledApp({required this.current, this.previous});
-
-  factory InstalledApp.fromJson(Map<String, dynamic> json) => InstalledApp(
-        current: InstalledVersion.fromJson(json['current'] as Map<String, dynamic>),
-        previous: json['previous'] == null
-            ? null
-            : InstalledVersion.fromJson(json['previous'] as Map<String, dynamic>),
+        notes: json['notes'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
+        'version': version,
+        'exe': exe,
+        'dir': dir,
+        if (notes != null && notes!.isNotEmpty) 'notes': notes,
+      };
+}
+
+/// Stato locale di un gioco: la versione in uso e le versioni piu vecchie
+/// conservate nell'archivio (dalla piu recente), per poterci tornare.
+class InstalledApp {
+  final InstalledVersion current;
+  final List<InstalledVersion> archive;
+
+  const InstalledApp({required this.current, this.archive = const []});
+
+  /// La versione immediatamente precedente, se c'e.
+  InstalledVersion? get previous => archive.isEmpty ? null : archive.first;
+
+  factory InstalledApp.fromJson(Map<String, dynamic> json) {
+    final archive = <InstalledVersion>[
+      for (final v in json['archive'] as List<dynamic>? ?? const [])
+        InstalledVersion.fromJson(v as Map<String, dynamic>),
+    ];
+    // Formato precedente: una sola versione "previous".
+    if (archive.isEmpty && json['previous'] != null) {
+      archive.add(InstalledVersion.fromJson(json['previous'] as Map<String, dynamic>));
+    }
+    return InstalledApp(
+      current: InstalledVersion.fromJson(json['current'] as Map<String, dynamic>),
+      archive: archive,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
         'current': current.toJson(),
-        if (previous != null) 'previous': previous!.toJson(),
+        if (archive.isNotEmpty) 'archive': [for (final v in archive) v.toJson()],
       };
 }

@@ -208,6 +208,7 @@ $item = Get-Item $zip
 $sizeMb = [math]::Round($item.Length / 1MB, 1)
 Write-Host "Zip pronto: $sizeMb MB"
 
+if (-not $Notes) { $Notes = "Build di $AppName $Version dal commit $short." }
 $manifestFile = Join-Path $out 'manifest.json'
 $manifest = [ordered]@{
     id      = $AppId
@@ -219,6 +220,7 @@ $manifest = [ordered]@{
     sha256  =(Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
     size    = [int64]$item.Length
     commit  = $sha
+    notes   = $Notes
 } | ConvertTo-Json
 [System.IO.File]::WriteAllText($manifestFile, $manifest, (New-Object System.Text.UTF8Encoding($false)))
 
