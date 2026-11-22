@@ -37,10 +37,10 @@ GitHub, foto profilo, **Settings > Developer settings > GitHub Apps > New GitHub
 
 Poi, dalla pagina dell'app:
 1. Copia il **Client ID** (inizia per `Iv`): non e un segreto. E gia impostato in `lib/config.dart` (`githubClientId`); si puo cambiare con `--dart-define=GITHUB_CLIENT_ID=...`. **Non generare** ne il Client secret ne la Private key: non servono.
-2. **Install App** > Install sul tuo account > *Only select repositories* > i 3 repository (`Forna_Dagar_Card_Game`, `Card_Game`, `Forna_Dagar_Launcher`).
+2. **Install App** > Install sul tuo account > *Only select repositories* > i 4 repository (`Forna_Dagar_Card_Game`, `Card_Game`, `Forna_Dagar_Godot`, `Forna_Dagar_Launcher`).
 
 ### 2. Invitare gli amici
-In **ognuno dei 3 repository** (Settings > Collaborators > Add people). Su un account personale GitHub non offre il ruolo "Read": i collaboratori hanno accesso normale, ma il token del launcher resta in sola lettura grazie alla GitHub App. Chi ha accesso vede anche il codice sorgente.
+In **ognuno dei 4 repository** (Settings > Collaborators > Add people). Su un account personale GitHub non offre il ruolo "Read": i collaboratori hanno accesso normale, ma il token del launcher resta in sola lettura grazie alla GitHub App. Chi ha accesso vede anche il codice sorgente.
 
 Ognuno deve avere un account GitHub (gratuito) e **accettare gli inviti** (arrivano per email).
 

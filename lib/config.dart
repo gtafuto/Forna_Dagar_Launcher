@@ -54,4 +54,10 @@ const games = <GameEntry>[
     description: 'Card Generator, Deck Constructor e Tavolo da Gioco.',
     repo: 'gtafuto/Card_Game',
   ),
+  GameEntry(
+    id: 'forna_dagar_godot',
+    title: 'Forna Dagar (Godot)',
+    description: 'Prototipo del Tavolo da Gioco in Godot, replica fedele di quello Flutter.',
+    repo: 'gtafuto/Forna_Dagar_Godot',
+  ),
 ];
